@@ -1,12 +1,14 @@
 # Guida Google Cloud Platform
 
-## Elementi da implementare
-* [Creare il progetto]
-* [Firestore](firestore)
-* [RESTful API](restful-api)
-* [Web application](web-application)
-* [Pub/Sub](pub/sub)
 
+* [Creazione di un progetto](#creazione-di-un-progetto)
+* [Creazione di un'app nel progetto](#creazione-di-unapp-nel-progetto)
+* [Creazione del database Firestore](#creazione-del-database-firestore)
+* [Creare RESTful API](#creare-restful-api)
+* [Fare il deploy dell'app](#fare-il-deploy-dellapp)
+* [Creazione applicazione Flask con frontend](#creazione-applicazione-flask-con-frontend)
+* [Functions](#functions)
+* [PubSub](#pubsub)
 # Creazione di un progetto
 ### 1. **Creazione dell'ambiente virtuale**   
 Creare .venv e attivarlo, inolte selezionarlo nell'IDE
@@ -261,7 +263,7 @@ gcloud app deploy app.yaml
 ```
 
 
-# Creareapplicazione Flask con frontend
+# Creazione applicazione Flask con frontend
 L'obiettivo è quello di creare un'interfaccia web per visualizzare i dati all'interno del database.  
 Solitament ele web app con frontend hanno la seguente struttura:
 * templates/    --> Cartella in cui raggruppiamo tutti i template HTML
