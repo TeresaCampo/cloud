@@ -200,6 +200,8 @@ class Object1Resource(Resource):
         return obj, codice(200, 400)
     
     def post(self, NOME_PARAMETRO):
+        param=request.json
+
         return None, codice(200, 400)
 
     def put(self, NOME_PARAMETRO):
@@ -276,8 +278,10 @@ Solitament ele web app con frontend hanno la seguente struttura:
 ```python
 from flask import Flask, render_template, request, redirect
 from file_firestore import *
+from flask_cors import CORS
 
 app = Flask(__name__)
+CORS(app)
 object_dao = Classe_firestore()
 
 @app.route('/path', methods=['GET']) 
@@ -365,7 +369,9 @@ Se dobbiamo utilizzare dei WTForm aggiungiamo, selezionando le tipologie di fiel
 from wtforms import Form, StringField, IntegerField, SubmitField, validators
 ```
 Per utilizzare i WTForm dichiariamo una classe che eredita da Form in cui spefichiamo i nomi e la tipologia di field e validators per i dati che saranno inseriti al loro interno  
-La struct serve quando vogliamo creare un oggetto Form a partire da un dizionario.
+La strucgcloud projects delete
+gcloud projects delete
+t serve quando vogliamo creare un oggetto Form a partire da un dizionario.
 ```python
 class Classeform(Form):
     name =  StringField('Name', [validators.Length(min=1, max=255)])
@@ -391,7 +397,16 @@ def nome_della_funzione():
         cform.name.data = PARAM
         ...
 ```
+# Staccare il billing di un progetto o eliminarlo
+Per staccare il billing di un progetto
+```bash
+gcloud billing projects unlink ${PROJECT_ID}
+```
 
+Per eliminare un progetto
+```bash
+gcloud projects delete
+```
 # Functions 
 Ci sono due tipi di funcitons
 In ogni caso bisogna creare una nuova cartella e creare
@@ -399,6 +414,11 @@ In ogni caso bisogna creare una nuova cartella e creare
 - requirement.txt
 - credential.json
 
+In particolar enei requirements di solito server
+```
+Flask==3.1.2
+google-cloud-firestore==2.22.0
+```
 ### 1. Functions che rispodnono a trigger http
 ```python
 from flask import Flask, request
