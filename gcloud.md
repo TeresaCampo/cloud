@@ -243,7 +243,7 @@ automatic_scaling:
   max_instances: 1
 
 # Specifica quale app utilizzare per creare il servizio (es. api:app -> seleziona app da api.py)
-entrypoint: gunicorn main:app
+entrypoint: gunicorn api:app
 # Specifica il nome del servizio
 service: default
 
