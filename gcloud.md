@@ -38,13 +38,13 @@ Definiamo la variabile globale PROJECT_ID e BILLING_ACCOUNT_ID
 
 ```bash
 export PROJECT_ID=
-echo PROJECT_ID
+echo $PROJECT_ID
 ```
 
 ```bash
 gcloud billing accounts list
 export BILLING_ACCOUNT_ID=
-echo BILLING_ACCOUNT_ID
+echo $BILLING_ACCOUNT_ID
 ```
 
 Creiamo il progetto e lo settiamo come default
@@ -59,7 +59,7 @@ gcloud config get-value project
 
 A questo punto colleghiamo il billign account (senza il quel non e' possibile fare null anel progetto)
 ```bash
-gcloud billing projects link ${PROJECT_ID} --billing-account YOUR_BILLING_ACCOUNT
+gcloud billing projects link ${PROJECT_ID} --billing-account $BILLING_ACCOUNT_ID
 ```
 Per verificare se il collegamento è stato eseguito con successo, eseguendo il seguente comando dovremmo avere per la voce `billingEnable == True`.
 ```bash
@@ -393,12 +393,77 @@ def nome_della_funzione():
 ```
 
 # Functions 
+Ci sono due tipi di funcitons
+In ogni caso bisogna creare una nuova cartella e creare
+- main.py
+- requirement.txt
+- credential.json
 
+### 1. Functions che rispodnono a trigger http
+```python
+from flask import Flask, request
+from google.cloud import firestore
 
+def get_trend_v2(request):
+    path = request.path.split('/')[-1]
+    ...
+    return f"Ritorna stringa"
+```
 
+```bash
+gcloud functions deploy get_trend_Loree --runtime python310 --trigger-http --allow-unauthenticated --entry-point get_trend_v2 --no-gen2
+```
+Dopo functions specifico il nome dell'URL
+Dopo --entry-point specifico il nome della funzione nel file .py
 
+Esempio di URL: `https://us-central1-my-function-test-terra.cloudfunctions.net/get_trend_Loree/secondo`
 
+### 2. Functions che rispodnono a trigger ad evento
 
+```python
+from flask import Flask, render_template, request, redirect
+from google.cloud import firestore
+from datetime import datetime, timedelta
+
+def get_elements_by_data(db,data):
+    c = db.collection("prenotazioni")
+    res = []
+    for i in c.stream():
+        asilo_ricavato = i.id.split("_")[0]
+        data_ricavata = i.id.split("_")[1]
+        if  data_ricavata == data:
+            res.append({"nome_asilo": asilo_ricavato, "bambini": i.to_dict()["bambini"], "data": data})
+    return res
+
+def update_db(data, context): 
+    db = firestore.Client(database="mensa")
+
+    data_document_modified = context.resource.split('_')[1]
+
+    totale_pasti = 0
+    lista_pasti_oggi = get_elements_by_data(db,data_document_modified)
+
+    for item in lista_pasti_oggi:
+        totale_pasti += item["bambini"]
+    print("mi hanno chiamta")
+
+    db.collection("riepiloghi").document(data_document_modified).set({"data":data_document_modified, 
+                                                                        "totale_pasti_giornata": totale_pasti,
+                                                                        "lista ordini": lista_pasti_oggi})
+    
+
+```
+
+Esegui:
+
+```bash
+gcloud functions deploy update_db \
+--runtime python310 \
+--trigger-event "providers/cloud.firestore/eventTypes/document.write" \
+--trigger-resource "projects/mensa-esame/databases/mensa/documents/prenotazioni/{documentId}" \
+--docker-registry=artifact-registry \
+--no-gen2
+```
 
 # PubSub 
 
