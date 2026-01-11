@@ -68,7 +68,7 @@ network MG1
 ## 4. Creare il file .ini.mako
 Si tratta del file per creare le configurazioni delle varie run da eseguire
 
-# file.ini.mako
+### file.ini.mako
 ```ini
 [General]
 ned-path = .;../queueinglib
@@ -101,6 +101,10 @@ Eseguendo questo comando viene generato il file .ini
 python3 /home/terra/omnetpp-6.3.0/.venv/bin/update_template.py
 ```
 
+Per controllare che la configurazione sia corretta le eseguo nell'itnerfaccia grafica di omnett e la visualizzo
+```bash
+./queuenet file.ini
+```
 ## 6. Creo Runfile
 Dal file di configurazioen creo il Runfile
 ```bash
@@ -155,19 +159,30 @@ In histograms specifichiamo gli istogrammi che vogliamo estrarre dal file .sca
         "SinkTime2": {"module": "**.sink2", "histogram_name": "lifeTime:histogram"}
     },
     "analyses": {
-        "Hist_LB_US1": {
-            "outfile": "results/MM1_LB_Unbalanced_Source_Nobal1.data",
-            "scenario": {"mu1": "5.0", "mu2": "5.0", "lambda1": "4.5", "lambda2": "2.0", "Balance":"NoBal"},
-            "histogram": "SinkTime1"
-        },        
-        "Hist_LB_US2": {
-            "outfile": "results/MM1_LB_Unbalanced_Source_Nobal2.data",
-            "scenario": {"mu1": "5.0", "mu2": "5.0", "lambda1": "4.5", "lambda2": "2.0", "Balance":"NoBal"},
-            "histogram": "SinkTime2"
-        }
+       ...
     }
 }
 ```
+**Dati scenario**
+In particolare `scenario_schema` contiene parametri che si trovano nel file .sca, non in generale le variabili definit enel .ned
+Per questo motivo se voglio utilizzare un parametro nel creare la tabella scenario DEVO segnare il parametro come parametro di configurazione e quindi nel file .ini.mako in modo da esser epoi inserito nel file .sca generato.
+
+Ad esempio nel file .ini.mako devo definire **.lambda1
+```json
+"scenario_schema": {
+        "lambda1": {"pattern": "**.lambda1", "type": "real"},
+      
+```
+
+**Aggregation di metriche**
+L'aggregazione avviene nella funzione aggregate(data, aggr) e viene applicata ai vettori di dati estratti dai file .sca. 
+Questo è utile quando una simulazione produce molteplici campioni per una stessa metrica e si vuole un singolo valore rappresentativo.
+
+- sum: Calcola la somma di tutti i valori trovati per quella metrica.
+- avg: Calcola la media aritmetica (mean) dei valori.
+- std: Calcola la deviazione standard.
+- none: Prende semplicemente il primo elemento dell'array (arr[0]).
+Quando si sa che il valore è unico (es. un parametro di configurazione che è stato salvato come scalare, o un risultato finale singolo come "simulazione terminata con successo").
 
 ## 9. Salviamo i file nel database
 Sfruttiamo il file di configurazioen per salvare i dati in un database sqlite, ovvero file .db
@@ -175,11 +190,112 @@ Sfruttiamo il file di configurazioen per salvare i dati in un database sqlite, o
 python3 /home/terra/omnetpp-6.3.0/.venv/bin/parse_data.py -c configMM1.json -d DATABASE.db -r rusults/NOME*.sca
 ```
 
-## 10. Analizziamo i dati del databas
+## 10. Analizziamo i dati del database
 Crea i file .data che abbiamo specificato all'interno del .json (in *analyses*), al cui interno sarà presente una tabella con i dati organizzati seguendo sempre le specifiche del .json.
 ```bash
 python3 /home/terra/omnetpp-6.3.0/.venv/bin/analyze_data.py -c configNOME.json -d DATABASE.db
 ```
+
+In questo caso ci basiamo sulla sezione analyses del config.json
+Ci sono due modalita' di analisi dati
+1. analisi di dati scalari
+2. analisi di istogrammi
+
+
+**Focus su analisi dati scalari**
+In questo caso nel json bisogna specificare:
+```json
+{
+    "scenario_schema": {
+        ...
+    },
+    "metrics": {
+        ...
+    },
+    "histograms": {
+        ...
+    },
+    "analyses": {
+       "SensRho-Kinf": {
+            "outfile": "results/loadcurve_inf.data",
+            "scenarios": {
+                "fixed": {"K": "-1"},
+                "range": ["rho"]
+            },
+            "metrics": [
+                {"metric": "TotalJobs", "aggr": "none"},
+                {"metric": "DroppedJobs", "aggr": "none"}
+                    ]
+        },
+        "SensRho-K10": {
+            "outfile": "results/loadcurve_K10.data",
+            "scenarios": {
+                "fixed": {"K": "10"},
+                "range": ["rho"]
+            },
+            "metrics": [
+                {"metric": "TotalJobs", "aggr": "none"},
+                {"metric": "DroppedJobs", "aggr": "none"},
+                {"metric": "PQueue", "aggr": "none"},
+                {"metric": "ServiceTime", "aggr": "none"},
+                {"metric": "WaitingTime", "aggr": "none"},
+                {"metric": "ResponseTime", "aggr": "none"}
+                    ]
+        },
+    }
+}
+```
+
+Per ogni configurazione di analysis bisogna specificare il nome e
+- outfile: Il percorso del file di output dove verranno salvati i dati.
+- scenarios: Quali dati estrarre dal DB.
+- fixed (object): Coppie chiave-valore dei parametri che devono rimanere costanti (es. num_nodi, velocità). Corrisponde alla clausola SQL WHERE.
+- range (list of strings): I nomi dei parametri che variano (l'asse X del tuo grafico). Corrisponde alla clausola SQL ORDER BY.
+
+- metrics: Le metriche da estrarre (asse Y).  
+-- metric (string): Il nome della metrica salvata nella tabella value.  
+-- aggr (string): Il tipo di aggregazione salvata nel DB (avg, sum, std, none).
+Stesse aggregazioni utilizzate da parse_data
+
+**Focus su analisi istogrammi**
+L'analisi istogramma produce una stima della Funzione di Densità di Probabilità media su tutte le tue simulazioni (run), normalizzata e interpolata.
+
+Quando lanci $N$ run diverse di una simulazione (es. con seed diversi), ogni run produce un istogramma. Il problema è che i bin spesso non coincidono.
+- Run 1 potrebbe avere un bin tra 0.10ms e 0.12ms.
+- Run 2 potrebbe averne uno tra 0.11ms e 0.13ms.Non puoi sommarli direttamente indice per indice. Inoltre, una run potrebbe aver generato 1000 pacchetti e un'altra 1050. I conteggi assoluti non sono confrontabili.
+
+Lo script si occupa di questo.
+
+```json
+{
+    "scenario_schema": {
+        ...
+    },
+    "metrics": {
+        ...
+    },
+    "histograms": {
+        ...
+    },
+    "analyses": {
+        "analisi_distribuzione_ritardo": {
+            "outfile": "data/distribuzione_ritardo.dat",
+            "scenario": {
+                "num_users": "50",
+                "modulazione": "QAM16",
+                "carico_traffico": "0.8"
+            },
+            "histogram": "endToEndDelay:histogram"
+        }
+    }
+}
+```
+Per ogni consigurazione di analyses bisogna specificare il nome e:
+- outfile: Il percorso del file di output.
+- scenario (object): Al singolare!!! 
+ Un dizionario di parametri fissi che identificano univocamente la configurazione da analizzare (tutti i parametri tranne il run number).
+- histogram: Il nome dell'istogramma (o modulo) salvato nella tabella histogram
+
 
 ## 11. Plottiamo i dati con plotlib
 ```python
