@@ -1,8 +1,8 @@
 # Guida all'analisi di carico con Omnet
 ## 1. Spostarsi nella cartella oment
-    ```bash
-    cd /home/terra/omnetpp-6.3.0/samples/queuenet
-    ```
+```bash
+cd /home/terra/omnetpp-6.3.0/samples/queuenet
+```
 ## 2. Eliminare eventuali rimanenze vecchie  
 - results/
 - .ini
