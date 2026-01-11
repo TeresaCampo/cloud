@@ -445,36 +445,62 @@ from flask import Flask, render_template, request, redirect
 from google.cloud import firestore
 from datetime import datetime, timedelta
 
-def get_elements_by_data(db,data):
-    c = db.collection("prenotazioni")
-    res = []
-    for i in c.stream():
-        asilo_ricavato = i.id.split("_")[0]
-        data_ricavata = i.id.split("_")[1]
-        if  data_ricavata == data:
-            res.append({"nome_asilo": asilo_ricavato, "bambini": i.to_dict()["bambini"], "data": data})
-    return res
+...
 
 def update_db(data, context): 
     db = firestore.Client(database="mensa")
 
-    data_document_modified = context.resource.split('_')[1]
+    document_name = context.resource.split("/")[-1]
 
-    totale_pasti = 0
-    lista_pasti_oggi = get_elements_by_data(db,data_document_modified)
-
-    for item in lista_pasti_oggi:
-        totale_pasti += item["bambini"]
-    print("mi hanno chiamta")
-
-    db.collection("riepiloghi").document(data_document_modified).set({"data":data_document_modified, 
-                                                                        "totale_pasti_giornata": totale_pasti,
-                                                                        "lista ordini": lista_pasti_oggi})
+    new_value = data['value'] if len(data["value"]) != 0 else None
+    old_value = data['oldValue'] if len(data["oldValue"]) !=0 else None
+    if new_value and not old_value: # document added
+        pass
+    elif not new_value and old_value: # document removed
+        pass
+    else: # document updated
+        pass
     
 
 ```
 
-Esegui:
+**In particolare il parametro data contiene:**
+```json
+{
+  "oldValue": {}, 
+
+	"value": {
+	    "createTime": "2025-01-10T10:00:00.000Z",
+	    "fields": {
+	      "bambini": {
+	        "integerValue": "25" 
+	      },
+	      "nome_asilo": {
+	        "stringValue": "AsiloRossi"
+	      }
+	    },
+	    "name": "projects/mensa-esame/databases/mensa/documents/prenotazioni/AsiloRossi_2025-10-10",
+	    "updateTime": "2025-01-10T10:00:00.000Z"
+  },
+
+  "updateMask": {
+    "fieldPaths": [ "bambini" ]
+  }
+}
+```
+Se old_value e' vuoto e value no --> creazioen documento
+Se nessuno dei due e' vuoto --> aggiornamento
+Se old_value e' pieno e value no --> cancellazione
+
+**In particolare il parametro context contiene:**
+- context.resource, ovvero quale risorsa ha scatenato l'evento.
+  È una stringa che rappresenta il Full Path del documento su Firestore.
+  Esempio: "projects/mensa-esame/databases/mensa/documents/prenotazioni/AsiloRossi_2025-10-10"
+- context.event_id, ovvero id dell'evento. SI usa per permettere concetto di idempotenza ma noi non ci soffermiamo.
+- context.event_type, indica il tipo di evento (wirte, delete, creation)
+- context.timestamp, indica la data in cui e' stato generato l;evento ovvero quando e' scattato il trigger (non quando e' partita la funzioen)
+  
+Per sviluppare la funzioen si esegue:
 
 ```bash
 gcloud functions deploy update_db \
@@ -486,10 +512,3 @@ gcloud functions deploy update_db \
 ```
 
 # PubSub 
-
-
-
-
-
-
-
