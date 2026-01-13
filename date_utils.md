@@ -37,17 +37,18 @@ def date_from_str(d):
 
 ## Creare cambiare il formato data, da dd-mm-YYYY -> YYYY-mm-dd
 ```python
-# DD-MM-YYYY -> transform to YYYY-MM-DD
-def from_UIdata_to_DBdata(data_document):
-    if data_document.get("data") and data_document["data"][2]=='-':
-        data_components = data_document["data"].split('-')
-        data_document["data"] = f"{data_components[-1]}-{data_components[1]}-{data_components[0]}"
-    return data_document
+def from_ddmmYYYY_to_YYYYmmdd(data_string):
+    try: 
+        input_date =  datetime.strptime(data_string, '%d-%m-%Y')
+        return datetime.strptime(input_date, '%Y-%m-%d')
+    except: 
+        return data_string
 
-# YYYY-MM-DD-> transform to DD-MM-YYYY
-def from_DBdata_to_UIdata(data_document):
-    if data_document.get("data") and data_document["data"][2]!='-':
-        data_components = data_document["data"].split('-')
-        data_document["data"] = f"{data_components[-1]}-{data_components[1]}-{data_components[0]}"
-    return data_document
+
+def from_YYYmmdd_to_ddmmYYYY(data_string):
+    try: 
+        input_date =  datetime.strptime(data_string, '%Y-%m-%d')
+        return datetime.strptime(input_date, '%d-%m-%Y')
+    except: 
+        return data_string
 ```
