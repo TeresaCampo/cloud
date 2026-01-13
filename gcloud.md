@@ -331,7 +331,18 @@ Vedi su
     </tbody>
 </table>
 ```
+### zip operator for tables in jinja
+```python
+return render_template("home.html", zip = zip, monthyear_print = monthyear_print, monthyear_links = monthyear_links)
+```
 
+```html
+{% for link, print in zip(monthyear_links,monthyear_print ) %}
+	<tr>
+		<td> <a href = "/{{link}}">{{print}}</a> </td>
+	</tr>
+{% endfor %}  
+```
 ### * If in jinga
 ```html
 {% if record.giorno == today %} <tr class="table-primary" > {% else %} <tr> {% endif %}
