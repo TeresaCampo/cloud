@@ -187,7 +187,7 @@ Quando si sa che il valore è unico (es. un parametro di configurazione che è s
 ## 9. Salviamo i file nel database
 Sfruttiamo il file di configurazioen per salvare i dati in un database sqlite, ovvero file .db
 ```bash
-python3 /home/terra/omnetpp-6.3.0/.venv/bin/parse_data.py -c configMM1.json -d DATABASE.db -r rusults/NOME*.sca
+python3 /home/terra/omnetpp-6.3.0/.venv/bin/parse_data.py -c configMM1.json -d DATABASE.db -r results/NOME*.sca
 ```
 
 ## 10. Analizziamo i dati del database
