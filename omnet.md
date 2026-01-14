@@ -314,15 +314,25 @@ def evaluate_price(total_busy_percentage, price_per_hour):
     total_price = total_busy_time * price_per_second
     return total_price
 
+def evaluate_ic(std_dev, confidence_level, n_replicas):
+    df = n_replicas - 1
+    alpha = 1 - (confidence_level / 100)
+    q = 1 - (alpha / 2)
+    t_critical = t.ppf(q, df)
+    ic = t_critical * (std_dev / math.sqrt(n_replicas))
+    return ic
+
 m1=data_mu1[0]
 d1=data_mu1[1]
-ic1 = d1
+ic1 = evaluate_ic(d1, 65,10)
+print(f"d1 = {d1} and ic {ic1}")
 busy1=data_mu1[2]
 costo1 = evaluate_price(busy1, 1.5)
 
 m2=data_mu2[0]
 d2=data_mu2[1]
-ic2 = d2
+print(d2)
+ic2 = evaluate_ic(d2, 65,10)
 busy2=data_mu2[2]
 costo2 = evaluate_price(busy2, 1.5)
 
@@ -340,6 +350,13 @@ import math
 data_mu1 = np.loadtxt("results/es3_mu1.data")
 data_mu2 = np.loadtxt("results/es3_mu2.data")
 
+def evaluate_ic(std_dev, confidence_level, n_replicas):
+    df = n_replicas - 1
+    alpha = 1 - (confidence_level / 100)
+    q = 1 - (alpha / 2)
+    t_critical = t.ppf(q, df)
+    ic = t_critical * (std_dev / math.sqrt(n_replicas))
+    return ic
 
 def evaluate_price(total_busy_percentage, price_per_hour):
     price_per_second = price_per_hour/3600
@@ -358,7 +375,7 @@ for row in range(data.shape[0]):
     n = row_data[0]
     m=row_data[1]
     d=row_data[2]
-    ic = d
+    ic = evaluate_ic(d, 65, 10)
     busy=row_data[3]
     costo = evaluate_price(busy, 1.5)
     print(f"{int(n)} tipologia1 --> Tr={m*1000:.3f}+-{ic*1000:.3f}ms, costo={costo:.5f}$")
@@ -373,7 +390,7 @@ for row in range(data.shape[0]):
     n = row_data[0]
     m=row_data[1]
     d=row_data[2]
-    ic = d
+    ic = evaluate_ic(d, 65, 10)
     busy=row_data[3]
     costo = evaluate_price(busy, 1.5)
     print(f"{int(n)} tipologia2 --> Tr={m*1000:.3f}+-{ic*1000:.3f}ms, costo={costo:.5f}$")
