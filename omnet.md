@@ -187,13 +187,13 @@ Quando si sa che il valore è unico (es. un parametro di configurazione che è s
 ## 9. Salviamo i file nel database
 Sfruttiamo il file di configurazioen per salvare i dati in un database sqlite, ovvero file .db
 ```bash
-python3 /home/terra/omnetpp-6.3.0/.venv/bin/parse_data.py -c configMM1.json -d DATABASE.db -r results/NOME*.sca
+python3 /home/terra/omnetpp-6.3.0/.venv/bin/parse_data.py -c confignet.json -d database.db -r results/N*.sca
 ```
 
 ## 10. Analizziamo i dati del database
 Crea i file .data che abbiamo specificato all'interno del .json (in *analyses*), al cui interno sarà presente una tabella con i dati organizzati seguendo sempre le specifiche del .json.
 ```bash
-python3 /home/terra/omnetpp-6.3.0/.venv/bin/analyze_data.py -c configNOME.json -d DATABASE.db
+python3 /home/terra/omnetpp-6.3.0/.venv/bin/analyze_data.py -c confignet.json -d database.db
 ```
 
 In questo caso ci basiamo sulla sezione analyses del config.json
@@ -296,8 +296,198 @@ Per ogni consigurazione di analyses bisogna specificare il nome e:
  Un dizionario di parametri fissi che identificano univocamente la configurazione da analizzare (tutti i parametri tranne il run number).
 - histogram: Il nome dell'istogramma (o modulo) salvato nella tabella histogram
 
+## 11. Calcoliamo il tempo di risposta medio, IC e costo
+```python
+import matplotlib.pyplot as plt
+import numpy as np
+from scipy.stats import t
+import math
+
+data_mu1 = np.loadtxt("results/es1_mu1.data")
+data_mu2 = np.loadtxt("results/es1_mu2.data")
+
+def evaluate_price(total_busy_percentage, price_per_hour):
+    price_per_second = price_per_hour/3600
+    total_simulation_time = 1000
+    total_busy_time = total_simulation_time * total_busy_percentage # in seconds
+
+    total_price = total_busy_time * price_per_second
+    return total_price
+
+m1=data_mu1[0]
+d1=data_mu1[1]
+ic1 = d1
+busy1=data_mu1[2]
+costo1 = evaluate_price(busy1, 1.5)
+
+m2=data_mu2[0]
+d2=data_mu2[1]
+ic2 = d2
+busy2=data_mu2[2]
+costo2 = evaluate_price(busy2, 1.5)
+
+print(f"40 server in parallelo, tipologia1 --> Tr={m1*1000:.3f}+-{ic1*1000:.3f}ms, costo={costo1:.2f}$")
+print(f"40 server in parallelo, tipologia2 --> Tr={m2*1000:.3f}+-{ic2*1000:.3f}ms, costo={costo2:.2f}$")
+```
+
+Oppure per piu' configurazioni
+```python
+import matplotlib.pyplot as plt
+import numpy as np
+from scipy.stats import t
+import math
+
+data_mu1 = np.loadtxt("results/es3_mu1.data")
+data_mu2 = np.loadtxt("results/es3_mu2.data")
+
+
+def evaluate_price(total_busy_percentage, price_per_hour):
+    price_per_second = price_per_hour/3600
+    total_simulation_time = 1000
+    total_busy_time = total_simulation_time * total_busy_percentage # in seconds
+
+    total_price = total_busy_time * price_per_second
+    return total_price
+
+print("server 1".center(50, "="))
+
+data = np.loadtxt("results/es3_mu1.data")
+for row in range(data.shape[0]):
+    row_data = data[row,:]
+
+    n = row_data[0]
+    m=row_data[1]
+    d=row_data[2]
+    ic = d
+    busy=row_data[3]
+    costo = evaluate_price(busy, 1.5)
+    print(f"{int(n)} tipologia1 --> Tr={m*1000:.3f}+-{ic*1000:.3f}ms, costo={costo:.5f}$")
+
+print("\n\n")
+print("server 2".center(50, "="))
+
+data = np.loadtxt("results/es3_mu2.data")
+for row in range(data.shape[0]):
+    row_data = data[row,:]
+
+    n = row_data[0]
+    m=row_data[1]
+    d=row_data[2]
+    ic = d
+    busy=row_data[3]
+    costo = evaluate_price(busy, 1.5)
+    print(f"{int(n)} tipologia2 --> Tr={m*1000:.3f}+-{ic*1000:.3f}ms, costo={costo:.5f}$")
+```
 
 ## 11. Plottiamo i dati con plotlib
+Intanto devo creare nel progetto il file utils del prof, `plot.py`:
+```python
+#!/usr/bin/python3
+import sys
+import pandas as pd
+import matplotlib.pyplot as plt
+import numpy as np
+from matplotlib.patches import Patch
+import matplotlib as mpl
+import matplotlib.colors as mc
+#import pathlib
+
+def set_fonts():
+    """ 
+    Set LaTeX-friendly fonts. Call this function at the beginning of your code
+    """
+    mpl.rcParams['font.family'] = 'Nimbus Sans'
+    mpl.rcParams["figure.autolayout"] = True
+    mpl.rc('text', usetex=True)
+    mpl.rcParams.update({'font.size': 10})
+
+def plot_line(ax, format, fname, label, xcol, ycol, errcol=None):
+    """
+    Plot a line from data
+    
+    Parameters
+    ----------
+    ax : 
+        canvas for plotting. Refer to matplotlib.pyplot. Can ge the object returned by matplotlib.pyplot.subplots()
+    format: str
+        format string. Refer to matplotlib.pyplot
+    fname: str or None
+        name of a tab-separated column file. Column names are on the first row
+    label: str
+        label of the curve in the plot
+    xcol:
+        the x data for the plot 
+        can be the name of a column in a dataframe if fname is a file with data
+        can be a callable that is invoked on the dataframe
+        can be a set list/array with data
+    ycol:
+        like xcol, but this is the y data of the plot
+    errcol:
+        like xcol but ti can aslo be none. If set it contains the error values to represent a confidence interval
+    """
+    if fname is not None:
+        data = pd.read_csv(fname, sep='\t')
+    use_data=fname is not None and not callable(xcol) and not callable(ycol) and not callable(errcol)
+    xcol = xcol(data) if callable(xcol) else xcol
+    ycol = ycol(data) if callable(ycol) else ycol
+    errcol=errcol(data) if callable(errcol) else errcol
+    data=data if use_data else None
+    if errcol is not None:
+        ax.errorbar(xcol, ycol, yerr=errcol, data=data, fmt=format, label=label, capsize=5)
+    else:
+        ax.plot(xcol, ycol, format, data=data, label=label)
+```
+
+Poi creo il file per creare il plot, `bonus.py`
+```python
+#!/usr/bin/python3
+import sys
+import pandas as pd
+import matplotlib.pyplot as plt
+import numpy as np
+from matplotlib.patches import Patch
+import matplotlib as mpl
+import matplotlib.colors as mc
+from plots import plot_line, set_fonts
+
+lam=200
+cv=1.0
+def theoretical(N, mu):
+    rho=lam/(mu * N)
+    if rho >= 1:
+        return None
+    else:
+        return 1/mu * (1 + ((1+cv**2)/2)*rho/(1-rho)) 
+    
+data_mu1 = np.loadtxt("results/es3_mu1.data")
+data_mu2 = np.loadtxt("results/es3_mu2.data")
+
+tr_mu1 = data_mu1[:,1]
+tr_mu2 = data_mu2[:,1]
+
+pts_mu1 = data_mu1[:,0]
+pts_mu2 = data_mu2[:,0]
+
+if __name__ == "__main__":
+    # plot respone time
+    fig, ax = plt.subplots()
+    ax.set(xlabel='Number of servers N', ylabel='Time [s]')
+    #plot_line(ax, 'o--', 'sample.data', 'Response Time', '#x', 'y', 'sigma(y)')
+    
+    pts=list(range(15, 50))
+    plot_line(ax, '-', None, 'Theoretical curve mu=10', pts, [theoretical(x, 10) for x in pts])
+    plot_line(ax, '-', None, 'Theoretical curve mu=15', pts, [theoretical(x, 15) for x in pts])
+
+    plot_line(ax, 'o--', None, 'Response time mu=10', pts_mu1, tr_mu1)
+    plot_line(ax, 'o--', None, 'Response time mu=15', pts_mu2, tr_mu2)
+    
+
+    plt.legend()
+    # plt.savefig('sample.png')
+    plt.show()
+```
+
+# Focus su plot, file iper generico del prof
 ```python
 import matplotlib.pyplot as plt
 import numpy as np
