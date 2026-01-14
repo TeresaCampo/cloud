@@ -396,7 +396,7 @@ for row in range(data.shape[0]):
     print(f"{int(n)} tipologia2 --> Tr={m*1000:.3f}+-{ic*1000:.3f}ms, costo={costo:.5f}$")
 ```
 
-## 11. Plottiamo i dati con plotlib
+## 12. Plottiamo i dati con plotlib
 Intanto devo creare nel progetto il file utils del prof, `plot.py`:
 ```python
 #!/usr/bin/python3
