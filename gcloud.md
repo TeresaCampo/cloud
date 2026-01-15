@@ -359,10 +359,13 @@ return render_template("home.html", zip = zip, monthyear_print = monthyear_print
 
 ### * WTForm
 Crea un WTForm con le label e i valori associati che sono specificati nella sua definizione (vedi dopo).
+
+Se non specifico `action` allora la richiesta vien efatta all'URL in cui mi trovo, altrimenti all'URL specificato da action  .
+Utile se ho piu' form nella stess apagina.
 ```html
 <html>
     <body>
-        <form method="POST">
+        <form method="POST" action="/subscription">
             Create new color:
             <div>{{form.name.label}}: {{form.name}}</div>
             <div>{{form.red.label}}: {{form.red}}</div>
@@ -398,15 +401,18 @@ class Classeform(Form):
 @app.route('/path', methods=['GET', 'POST'])
 def nome_della_funzione():
     if request.method == 'POST':
-        cform = Classeform(request.form)
-        object_dao.add_color(cform.name.data, cform.red.data)
-        ...
+        cform = Classeform(request.form)    # per inizializzare i campi del form con i valori isneriti nel forntend    
+        if cform.validate():
+            object_dao.add_color(cform.name.data, cform.red.data)
+            ...
             
     element = object_dao.get_element_by_name(PARAM)
     if request.method == 'GET':
-        cform=Classeform(obj=Struct(**element))
-        cform.name.data = PARAM
-        ...
+        cform=Classeform(obj=Struct(**element))     # per inizializzare i campi del form con valori che scelgo io
+        return render_template("home.html", myform=cform)
+
+    return render_template("home.html", myform=Classeform())    # per creare un form vuoto
+
 ```
 # Staccare il billing di un progetto o eliminarlo
 Per staccare il billing di un progetto
@@ -442,12 +448,12 @@ def get_trend_v2(request):
 ```
 
 ```bash
-gcloud functions deploy get_trend_Loree --runtime python310 --trigger-http --allow-unauthenticated --entry-point get_trend_v2 --no-gen2
+gcloud functions deploy nomeURL --runtime python310 --trigger-http --allow-unauthenticated --entry-point get_trend_v2 --no-gen2
 ```
 Dopo functions specifico il nome dell'URL
 Dopo --entry-point specifico il nome della funzione nel file .py
 
-Esempio di URL: `https://us-central1-my-function-test-terra.cloudfunctions.net/get_trend_Loree/secondo`
+Esempio di URL: `https://us-central1-my-function-test-terra.cloudfunctions.net/nomeURL/secondo`
 
 ### 2. Functions che rispodnono a trigger ad evento
 
@@ -523,3 +529,314 @@ gcloud functions deploy update_db \
 ```
 
 # PubSub 
+Per gestire un meccnaismo PubSub bsigona
+- creare un topic
+- il publisher puo' scrivere sul topic direttamente
+- il subbscriber si deve iscrivere ad una subscription connessa ad un topic
+
+## Focus su PubSub di tipo pull (subscriber fa pull, no webhook)
+### 1. Includere la librerie nei requirements e installarla
+Nei requirements.txt
+```txt
+google-cloud-pubsub==2.34.0
+```
+### 2. Creare il topic
+Per creare il topic:
+```bash
+export GOOGLE_APPLICATION_CREDENTIALS="$(pwd)/credentials.json"
+export TOPIC=cpu_temperature
+gcloud pubsub topics create ${TOPIC}
+```
+
+Per controllare i topics attivi:
+```bash
+gcloud pubsub topics list
+gcloud pubsub topics describe ${TOPIC}
+```
+
+### 3. Creare la subscription di tipo pull
+```bash
+export SUBSCRIPTION_NAME=cpu_sub
+gcloud pubsub subscriptions create ${SUBSCRIPTION_NAME} --topic ${TOPIC}
+```
+
+Per testare la subscription:
+* Pubblicare
+    ```bash
+    gcloud pubsub topics publish ${TOPIC} --attribute=from="cli" --message="Test Message"
+    ```
+    ```bash
+    Leggere facendo pull
+    gcloud pubsub subscriptions pull ${SUBSCRIPTION_NAME}
+    ```
+
+### 4. Creare il codice del publisher
+```python
+import json
+import os
+from google.cloud import pubsub_v1
+
+update_interval=5.0
+# Prendere variabili TOPIC e PROJECT_ID per creare il path del topic
+topic_name=os.environ['TOPIC'] if 'TOPIC' in os.environ.keys() else '...'
+project_id=os.environ['PROJECT_ID'] if 'PROJECT_ID' in os.environ.keys()  else '...'
+
+publisher = pubsub_v1.PublisherClient()
+topic_path = publisher.topic_path(project_id, topic_name)
+
+# Pubblicare sul topic, una volta oppure in modo ciclico
+if __name__=='__main__':
+    while True:
+        now = datetime.now()
+        data={'timestamp': now.timestamp(), 'time': str(now), 'temperature': None}
+        res = publisher.publish(topic_path, json.dumps(data).encode('utf-8'))
+        print(data, res.result())
+        
+        time.sleep(update_interval)
+```
+
+### 5. Creare il codice del subscriber
+
+```python
+import os
+import json
+import datetime
+from google.cloud import pubsub_v1
+from google.cloud import firestore
+
+# Prendere variabili SUBSCRIPTION_NAME e PROJECT_ID per creare il path della subscription
+subscription_name=os.environ['SUBSCRIPTION_NAME'] if 'SUBSCRIPTION_NAME' in os.environ.keys() else '...'
+project_id=os.environ['PROJECT_ID'] if 'PROJECT_ID' in os.environ.keys()  else '...'
+
+subscriber = pubsub_v1.SubscriberClient()
+subscription_path = subscriber.subscription_path(project_id, subscription_name)
+
+# Funzione per salvare i dati nel db (opzionale), riceve come input un dizionario
+db = firestore.Client()
+def save_temperature(data):
+        dt=datetime.datetime.fromtimestamp(data['timestamp'])
+        docname=dt.strftime('%Y%m%d')
+        print(docname, data['temperature'])
+        db.collection('temperature')
+		        .document(docname)
+		        .set({str(data['timestamp']): data['temperature']}, merge=True)
+
+# Funzione eseguita su ogni messaggio ricevuto
+def callback(message):
+    message.ack()
+    try:
+        save_temperature(json.loads(message.data.decode('utf-8')))
+    except:
+        pass    
+
+if __name__=='__main__': 
+    # Creare la subscription
+    pull = subscriber.subscribe(subscription_path, callback=callback)
+    try:
+        # Mettersi in ascolto
+        pull.result(timeout=30)
+    except:
+        pull.cancel()
+```
+
+**Focus su codifica dei dati**
+Il publisher codifica i dati nel seguente modo prima di inviarli:
+```python
+data={'timestamp': now.timestamp(), 'time': str(now), 'temperature': None}
+data_encoded = json.dumps(data).encode('utf-8')
+res = publisher.publish(topic_path, data_encoded)
+```
+
+Il subscriber decodifica i dati nel seguente modo appena li riceve:
+```python
+def callback(message):
+    message.ack()
+    decoded_data = json.loads(message.data.decode('utf-8'))
+    try:
+        save_temperature(decoded_data)
+    except:
+        pass  
+```
+
+## Focus si PubSub di tipo push (subscriber e' esposto e riceve trigger http quando arriva un messaggio sul topic)
+### 1. Includere la librerie nei requirements e installarla
+Nei requirements.txt
+```txt
+google-cloud-pubsub==2.34.0
+```
+### 2. Creare il topic
+Per creare il topic:
+```bash
+export GOOGLE_APPLICATION_CREDENTIALS="$(pwd)/credentials.json"
+export TOPIC=cpu_temperature
+gcloud pubsub topics create ${TOPIC}
+```
+
+Per controllare i topics attivi:
+```bash
+gcloud pubsub topics list
+gcloud pubsub topics describe ${TOPIC}
+```
+
+### 3. Creare la subscription di tipo push
+```bash
+export TOKEN="123token"
+export SUBSCRIPTION_NAME2="cpu_alert_sub"
+
+gcloud pubsub subscriptions create ${SUBSCRIPTION_NAME2} --topic ${TOPIC2} --push-endpoint "https://${PROJECT_ID}.appspot.com/pubsub/push?token=${TOKEN}" --ack-deadline 10
+```
+
+### 4. Creare il codice del publisher
+Uguale a prima:
+```python
+import json
+import os
+from google.cloud import pubsub_v1
+
+update_interval=5.0
+# Prendere variabili TOPIC e PROJECT_ID per creare il path del topic
+topic_name=os.environ['TOPIC'] if 'TOPIC' in os.environ.keys() else '...'
+project_id=os.environ['PROJECT_ID'] if 'PROJECT_ID' in os.environ.keys()  else '...'
+
+publisher = pubsub_v1.PublisherClient()
+topic_path = publisher.topic_path(project_id, topic_name)
+
+# Pubblicare sul topic, una volta oppure in modo ciclico
+if __name__=='__main__':
+    while True:
+        now = datetime.now()
+        data={'timestamp': now.timestamp(), 'time': str(now), 'temperature': None}
+        res = publisher.publish(topic_path, json.dumps(data).encode('utf-8'))
+        print(data, res.result())
+        
+        time.sleep(update_interval)
+```
+
+### 5. Creare il codice del subscriber
+```python
+topic_name=os.environ['TOKEN'] if 'TOKEN' in os.environ.keys() else '123token'
+
+@app.route('/pubsub/push', methods=['POST']) 
+def pubsub_push(): 
+    print('Received pubsub push') 
+    if request.args.get('token', '') != app.config['PUBSUB_VERIFICATION_TOKEN']: 
+        return 'Invalid request', 404 
+    
+    envelope = json.loads(request.data.decode('utf-8')) data=json.loads(base64.b64decode(envelope['message']['data'])) 
+    ...
+    return 'OK', 200
+
+```
+
+E come specificato prima devo esporre questa funzione sul seguente URL di gcloud ` --push-endpoint "https://${PROJECT_ID}.appspot.com/pubsub/push?token=${TOKEN}" `
+
+### Focus su comunicazione asincrona con PubSub (visto in una prova d'esame)
+Una persona puo' pubblicare su un topic per chiedere "a che persona devo fare il regalo". 
+Vi e' un worker che risponde alla richiesta mandando la persona associata.
+
+Codice della persona/client:
+```python
+import json
+from google.cloud import pubsub_v1
+
+# Topic richieste
+project_id = "gcloud-160125"
+topic_req = "secretsanta"
+publisher = pubsub_v1.PublisherClient()
+topic_path = publisher.topic_path(project_id, topic_req)
+
+# Topic risposte, lo usero' per creare da codice la subscription(non devo farlo da terminale)
+response_topic = "secretsanta-results"
+subscriber = pubsub_v1.SubscriberClient()
+resp_topic_path = publisher.topic_path(project_id, response_topic)
+
+# Subscription al topic delle risposte
+my_email = "otta@gmail.com"
+sub_name = f"sub-res-{my_email.replace('@', '-').replace('.', '-')}"
+sub_path = subscriber.subscription_path(project_id, sub_name)
+try:
+    filter_str = f'attributes.receiver_id = "{my_email}"'
+    subscriber.create_subscription(
+        request={
+            "name": sub_path,
+            "topic": resp_topic_path,
+            "filter": filter_str,
+        }
+    )
+    print(f"Subscription filtrata creata per {my_email}")
+except Exception:
+    print("Subscription già esistente o errore di permessi.")
+
+# Funzione da chiamare per ogni messaggio ricevuto nella mia subscription
+def callback(message):
+    data = json.loads(message.data.decode('utf-8'))
+    print(f"\n[SUCCESSO] Devi fare il regalo a: {data['assigned_target']}")
+    message.ack()
+    streaming_pull_future.cancel()
+
+# 1. publish sul primo topic
+publisher.publish(topic_path, json.dumps({"email": my_email}).encode('utf-8'))
+print("Richiesta inviata. In attesa del filtro server...")
+
+# 2. mi metto in ascolto sulla subscription del secondo topic
+streaming_pull_future = subscriber.subscribe(sub_path, callback=callback)
+try:
+    streaming_pull_future.result(timeout=20)
+except Exception:
+    streaming_pull_future.cancel()
+```
+
+Codice del worker:
+```python
+import json
+from datetime import datetime
+from google.cloud import pubsub_v1
+
+# topic risposte
+project_id = "gcloud-160125"
+response_topic = "secretsanta-results"
+publisher = pubsub_v1.PublisherClient()
+topic_path = publisher.topic_path(project_id, response_topic)
+
+# topic richieste
+request_sub = "secretsanta_sub"     # creato da terminale
+subscriber = pubsub_v1.SubscriberClient()
+sub_path = subscriber.subscription_path(project_id, request_sub)
+
+# Funzione da chiamare su ogni messaggio in arrivo su topic richieste
+def process_request(message):
+    try:
+        data = json.loads(message.data.decode('utf-8'))
+        user_email = data.get('email')
+        
+        ...
+        target_gift = "mario@gmail.com" 
+
+        response_payload = {
+            "assigned_target": target_gift,
+            "timestamp": str(datetime.now())
+        }
+        
+        # Pubblico su topic risposte
+        # Il filtro lavorerà su 'receiver_id'
+        publisher.publish(
+            topic_path, 
+            json.dumps(response_payload).encode('utf-8'),
+            receiver_id=user_email
+        )
+        
+        print(f"Sorteggio inviato a {user_email}")
+        message.ack()
+    except Exception as e:
+        print(f"Errore: {e}")
+        message.nack()
+
+# 1. In ascolto su topic richieste
+print("Worker attivo...")
+streaming_pull_future = subscriber.subscribe(sub_path, callback=process_request)
+with subscriber:
+    try:
+        streaming_pull_future.result()
+    except KeyboardInterrupt:
+        streaming_pull_future.cancel()
+```
